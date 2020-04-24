@@ -110,11 +110,18 @@ def bleu_eval(encoder, decoder, data_loader, batch_size):
         for i, (images, captions, lengths) in enumerate(data_loader):
             if i * batch_size >= 10000 or len(images) != batch_size:
                 continue
-            true_outputs.extend([[str(tok.item()) for tok in out if tok != 0] for out in captions])
-
+            true_outputs.extend([[str(tok.item()) for tok in out[1:-1] if tok != 0] for out in captions])
             features = encoder(images)
             outputs = decoder(features, captions, lengths)
             sample = decoder.sample(features, np.shape(captions)[1])
             decoder_outputs.extend(sample.numpy().astype(str).tolist())
-
-        return corpus_bleu(decoder_outputs, [true_outputs], 1)
+            
+        predictions = []
+        for pred in decoder_outputs:
+            curr = []
+            for tok in pred:
+                if tok == '2': # '<end>'
+                    break
+                curr.append(tok)
+            predictions.append(curr)
+        return corpus_bleu(predictions, [true_outputs], 1)
