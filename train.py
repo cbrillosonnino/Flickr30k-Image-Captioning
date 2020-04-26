@@ -11,6 +11,7 @@ import torch.backends.cudnn as cudnn
 import pickle
 from utils import Vocabulary, Custom_Flickr30k, collate_fn
 from models import EncoderCNN, DecoderRNNwithAttention
+from BLEU import bleu_eval
 
 
 def get_parser():
@@ -134,10 +135,10 @@ def main():
             learning_rate /= 5
             for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
-        ## TODO: Validation
-
-        is_best = BLEU < min_BLEU
-        min_BLEU = max(BLEU, min_BLEU)
+        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size)
+        print(curr_BLEU)
+        is_best = curr_BLEU < min_BLEU
+        min_BLEU = max(curr_BLEU, min_BLEU)
         save_checkpoint({
             'epoch': epoch + 1, 'encoder': encoder.state_dict(), 'decoder': decoder.state_dict(),
             'min_BLEU': min_BLEU, 'optimizer' : optimizer.state_dict(),
