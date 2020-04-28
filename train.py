@@ -18,7 +18,7 @@ from BLEU import bleu_eval
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Flickr30k Training')
-    parser.add_argument('-batch_size', type=int, default=512,
+    parser.add_argument('-batch_size', type=int, default=256,
                         help='batch size')
     parser.add_argument('-embed_size', type=int, default=256,
                         help='embedding demension size')
