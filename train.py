@@ -1,5 +1,6 @@
 import argparse, os
 from pathlib import Path
+import shutil
 
 import torch
 import torch.nn as nn
@@ -54,7 +55,7 @@ def main():
     learning_rate = args.lr
     start_epoch = 0
 
-    min_BLEU = 1_000_000
+    max_BLEU = 0
 
     vocab = pickle.load(open('vocab.p', 'rb'))
 
@@ -101,7 +102,7 @@ def main():
         if os.path.isfile(args.resume):
             checkpoint = torch.load(args.resume)
             start_epoch = checkpoint['epoch']
-            min_BLEU = checkpoint['min_BLEU']
+            max_BLEU = checkpoint['max_BLEU']
             encoder.load_state_dict(checkpoint['encoder'])
             decoder.load_state_dict(checkpoint['decoder'])
             optimizer.load_state_dict(checkpoint['optimizer'])
@@ -111,9 +112,10 @@ def main():
     PPL = AverageMeter()
 
     # Save
-    file = open(f'{args.save}/resuts.txt','a')
-    file.write('Loss,PPL,BLEU \n')
-    file.close()
+    if not args.resume:
+        file = open(f'{args.save}/resuts.txt','a')
+        file.write('Loss,PPL,BLEU \n')
+        file.close()
 
     for epoch in range(start_epoch, args.epoch):
         print('Epoch {}'.format(epoch+1))
@@ -148,13 +150,13 @@ def main():
             for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
         print('validating...')
-        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size)
-        is_best = curr_BLEU < min_BLEU
-        min_BLEU = max(curr_BLEU, min_BLEU)
+        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
+        is_best = curr_BLEU > max_BLEU
+        max_BLEU = max(curr_BLEU, max_BLEU)
         save_checkpoint({
             'epoch': epoch + 1, 'encoder': encoder.state_dict(), 'decoder': decoder.state_dict(),
-            'min_BLEU': min_BLEU, 'optimizer' : optimizer.state_dict(),
-        }, is_best)
+            'max_BLEU': max_BLEU, 'optimizer' : optimizer.state_dict(),
+        }, is_best, args.save)
 
         print('Validation BLEU = {}'.format(curr_BLEU))
 
@@ -181,10 +183,10 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, save, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, f'{args.save_dir}/model_best.pth.tar')
+        shutil.copyfile(filename, f'{save}/model_best.pth.tar')
 
 
 if __name__ == '__main__': main()
