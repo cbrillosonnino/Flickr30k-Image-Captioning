@@ -36,4 +36,4 @@ def bleu_eval(encoder, decoder, data_loader, batch_size):
                     break
                 curr.append(tok)
             predictions.append(curr)
-        return nltk.bleu_score.corpus_bleu(true_outputs, predictions)
+        return nltk.bleu_score.corpus_bleu(true_outputs, predictions, weights=(0.33, 0.33, 0.33, 0.0))
