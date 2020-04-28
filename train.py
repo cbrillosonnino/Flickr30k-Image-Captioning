@@ -9,6 +9,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 import torch.backends.cudnn as cudnn
 
 import pickle
+import numpy as np
 from utils import Vocabulary, Custom_Flickr30k, collate_fn
 from models import EncoderCNN, DecoderRNNwithAttention
 from BLEU import bleu_eval
@@ -46,14 +47,13 @@ def main():
 
     args = get_parser().parse_args()
 
-    NUM_WORKERS = 2
+    NUM_WORKERS = 4
     CROP_SIZE = 256
     NUM_PIXELS = 64
     ENCODER_SIZE = 2048
     learning_rate = args.lr
     start_epoch = 0
 
-    min_ppl = 1_000_000
     min_BLEU = 1_000_000
 
     vocab = pickle.load(open('vocab.p', 'rb'))
@@ -107,7 +107,17 @@ def main():
             optimizer.load_state_dict(checkpoint['optimizer'])
         else: print("No checkpoint found at '{}'".format(args.resume))
 
+    XEntropy = AverageMeter()
+    PPL = AverageMeter()
+
+    # Save
+    file = open(f'{args.save}/resuts.txt','a')
+    file.write('Loss,PPL,BLEU \n')
+    file.close()
+
     for epoch in range(start_epoch, args.epoch):
+        print('Epoch {}'.format(epoch+1))
+        print('training...')
         for i, (images, captions, lengths) in enumerate(train_loader):
 
             # Batch to device
@@ -125,18 +135,21 @@ def main():
             targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True).cpu()
 
             loss = criterion(scores.data, targets.data)
-
             decoder.zero_grad()
             encoder.zero_grad()
             loss.backward()
             optimizer.step()
 
+            XEntropy.update(loss.item(), len(lengths))
+            PPL.update(np.exp(loss.item()), len(lengths))
+        print('Train Perplexity = {}'.format(PPL.avg))
+
         if epoch % 50 == 0:
             learning_rate /= 5
             for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
+        print('validating...')
         curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size)
-        print(curr_BLEU)
         is_best = curr_BLEU < min_BLEU
         min_BLEU = max(curr_BLEU, min_BLEU)
         save_checkpoint({
@@ -144,6 +157,12 @@ def main():
             'min_BLEU': min_BLEU, 'optimizer' : optimizer.state_dict(),
         }, is_best)
 
+        print('Validation BLEU = {}'.format(curr_BLEU))
+
+        # Save
+        file = open(f'{args.save}/resuts.txt','a')
+        file.write('{},{},{} \n'.format(XEntropy.avg,PPL.avg,curr_BLEU))
+        file.close()
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""

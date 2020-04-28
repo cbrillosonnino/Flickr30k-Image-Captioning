@@ -130,11 +130,10 @@ class Custom_Flickr30k(VisionDataset):
             target = []
             for item in caption:
                 tokens = nltk.tokenize.word_tokenize(str(item).lower())
-                caption = []
-                caption.append(self.vocabulary('<start>'))
-                caption.extend([self.vocabulary(token) for token in tokens if token not in self.punc_set])
-                caption.append(self.vocabulary('<end>'))
-                target.append(torch.Tensor(caption))
+                target.extend([vocab(token) for token in tokens if token not in self.punc_set])
+                target.append(vocab('<break>'))
+
+            target = torch.Tensor(target[:-1])
 
         return img, target
 
