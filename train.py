@@ -119,7 +119,6 @@ def main():
         print('Epoch {}'.format(epoch+1))
         print('training...')
         for i, (images, captions, lengths) in enumerate(train_loader):
-
             # Batch to device
             images = images.to(device)
             captions = captions.to(device)
