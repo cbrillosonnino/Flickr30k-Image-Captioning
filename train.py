@@ -20,15 +20,13 @@ def get_parser():
     parser = argparse.ArgumentParser(description='Flickr30k Training')
     parser.add_argument('-batch_size', type=int, default=256,
                         help='batch size')
-    parser.add_argument('-embed_size', type=int, default=256,
-                        help='embedding demension size')
     parser.add_argument('-hid_size', type=int, default=512,
                         help='hidden demension size')
     parser.add_argument('-attn_size', type=int, default=512,
                         help='attention demension size')
     parser.add_argument('-drop', type=float, default=0.5,
                         help='dropout percentage')
-    parser.add_argument('-epoch', type=int, default=300,
+    parser.add_argument('-epoch', type=int, default=200,
                         help='number of training epochs')
     parser.add_argument('-fine_tune', type=bool, default=True,
                         help='whether to fine-tune the encoder or not')
@@ -52,6 +50,7 @@ def main():
     CROP_SIZE = 256
     NUM_PIXELS = 64
     ENCODER_SIZE = 2048
+    ALPHA = 1.  # attention regularization parameter
     learning_rate = args.lr
     start_epoch = 0
 
@@ -88,7 +87,7 @@ def main():
 
     # Initialize models
     encoder = EncoderCNN(args.fine_tune).to(device)
-    decoder = DecoderRNNwithAttention(len(vocab), args.embed_size, args.hid_size, 1, args.attn_size, ENCODER_SIZE, NUM_PIXELS, dropout=args.drop).to(device)
+    decoder = DecoderRNNwithAttention(vocab, args.hid_size, 1, args.attn_size, ENCODER_SIZE, NUM_PIXELS, dropout=args.drop).to(device)
 
     # Initialize optimization
     criterion = torch.nn.CrossEntropyLoss()
@@ -121,6 +120,9 @@ def main():
         print('Epoch {}'.format(epoch+1))
         print('training...')
         for i, (images, captions, lengths) in enumerate(train_loader):
+
+            print(i)
+
             # Batch to device
             images = images.to(device)
             captions = captions.to(device)
@@ -136,6 +138,8 @@ def main():
             targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True).cpu()
 
             loss = criterion(scores.data, targets.data)
+            loss += ALPHA * ((1. - attention_weights.sum(dim=1)) ** 2).mean()
+
             decoder.zero_grad()
             encoder.zero_grad()
             loss.backward()
