@@ -6,8 +6,8 @@ import numpy as np
 import nltk
 from collections import Counter
 import pickle
-
 import torch
+
 
 class Vocabulary(object):
     """Simple vocabulary wrapper."""
