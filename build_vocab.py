@@ -3,8 +3,11 @@ import nltk
 from collections import Counter
 from time import time
 import multiprocessing as mp
+from utils import Vocabulary
+import pickle
+import os
 
-def build_vocab(ann_file = '../flickr30k-captions/results_20130124.token', threshold = 4):
+def build_vocab(ann_file = '../flickr30k-captions/results_20130124.token', threshold = 3):
     """Build a simple vocabulary wrapper."""
     punc_set = set([',',';',':','.','?','!','(',')'])
     counter = Counter()
@@ -16,7 +19,7 @@ def build_vocab(ann_file = '../flickr30k-captions/results_20130124.token', thres
             img, caption = line.strip().split('\t')
             if img[:-2] in split:
                 caption_list.append(caption)
-                
+
     pool = mp.Pool(mp.cpu_count())
     tokens = pool.map(nltk.tokenize.word_tokenize, [caption.lower() for caption in tqdm(caption_list)])
     pool.close()
@@ -38,4 +41,7 @@ def build_vocab(ann_file = '../flickr30k-captions/results_20130124.token', thres
     # Add the words to the vocabulary.
     for i, word in enumerate(words):
         vocab.add_word(word)
-    return vocab
+
+    pickle.dump(vocab, open('vocab.p', 'wb'))
+
+if __name__ == '__main__': build_vocab()

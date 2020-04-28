@@ -22,7 +22,7 @@ class Vocabulary(object):
             self.word2idx[word] = self.idx
             self.idx2word[self.idx] = word
             self.idx += 1
-            self.all_words.apend(word)
+            self.all_words.append(word)
 
     def __call__(self, word):
         if not word in self.word2idx:
