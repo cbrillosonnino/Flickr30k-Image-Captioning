@@ -58,19 +58,14 @@ class SimpleDecoderRNN(nn.Module):
         return sampled_ids
 
 class EncoderCNN(nn.Module):
-    def __init__(self, fine_tune=False):
+    def __init__(self):
         super(EncoderCNN, self).__init__()
-        self.fine_tune = fine_tune
-        resnet = models.resnet50(pretrained=True) # switch from resnet50 to resnet152
+        resnet = models.resnet50(pretrained=True) # switch from resnet50 to resnet152?
         modules = list(resnet.children())[:-2]      # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
 
     def forward(self, images):
-        if self.fine_tune:
-            features = self.resnet(images)
-        else:
-            with torch.no_grad():
-                features = self.resnet(images)
+        features = self.resnet(images)
 
         return features
 

@@ -91,10 +91,7 @@ def main():
 
     # Initialize optimization
     criterion = torch.nn.CrossEntropyLoss()
-    if args.fine_tune:
-        params = list(encoder.parameters()) + list(decoder.parameters())
-    else:
-        params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
+    params = list(decoder.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
 
     if args.resume:
@@ -116,12 +113,12 @@ def main():
         file.write('Loss,PPL,BLEU \n')
         file.close()
 
-    for epoch in range(start_epoch, args.epoch):
+    for epoch in range(start_epoch, 20):
         print('Epoch {}'.format(epoch+1))
         print('training...')
         for i, (images, captions, lengths) in enumerate(train_loader):
 
-            if i%100 ==  0:
+            if i%10 ==  0:
                 print('[{}/{}]'.format(i,len(train_loader)))
 
             # Batch to device
@@ -170,6 +167,64 @@ def main():
         file = open(f'{args.save}/resuts.txt','a')
         file.write('{},{},{} \n'.format(XEntropy.avg,PPL.avg,curr_BLEU))
         file.close()
+
+    params = list(encoder.parameters()) + list(decoder.parameters())
+    optimizer = torch.optim.Adam(params, lr=learning_rate)
+
+    for epoch in range(20, args.epoch):
+        print('Epoch {}'.format(epoch+1))
+        print('training...')
+        for i, (images, captions, lengths) in enumerate(train_loader):
+
+            if i%10 ==  0:
+                print('[{}/{}]'.format(i,len(train_loader)))
+
+            # Batch to device
+            images = images.to(device)
+            captions = captions.to(device)
+            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+
+            encoder.train()
+            decoder.train()
+
+            features = encoder(images)
+            predictions, attention_weights = decoder(features, captions, lengths)
+
+            scores = pack_padded_sequence(predictions[:,:-1,:], torch.tensor(lengths)-2, batch_first=True).cpu()
+            targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True).cpu()
+
+            loss = criterion(scores.data, targets.data)
+            loss += ALPHA * ((1. - attention_weights.sum(dim=1)) ** 2).mean()
+
+            decoder.zero_grad()
+            encoder.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            XEntropy.update(loss.item(), len(lengths))
+            PPL.update(np.exp(loss.item()), len(lengths))
+        print('Train Perplexity = {}'.format(PPL.avg))
+
+        if epoch % 5 == 0:
+            learning_rate /= 5
+            for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
+
+        print('validating...')
+        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
+        is_best = curr_BLEU > max_BLEU
+        max_BLEU = max(curr_BLEU, max_BLEU)
+        save_checkpoint({
+            'epoch': epoch + 1, 'encoder': encoder.state_dict(), 'decoder': decoder.state_dict(),
+            'max_BLEU': max_BLEU, 'optimizer' : optimizer.state_dict(),
+        }, is_best, args.save)
+
+        print('Validation BLEU = {}'.format(curr_BLEU))
+
+        # Save
+        file = open(f'{args.save}/resuts.txt','a')
+        file.write('{},{},{} \n'.format(XEntropy.avg,PPL.avg,curr_BLEU))
+        file.close()
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
