@@ -114,6 +114,7 @@ class DecoderRNNwithAttention(nn.Module):
 
         #nlp = spacy.load('en_core_web_md') # very slow
         #_, self.embed_size = nlp.vocab.vectors.shape
+        self.embed_size = 256
         self.embed = nn.Embedding(self.vocab_size, self.embed_size, 0)
         #pretrained_weight = np.array(list(map(lambda x: nlp(x).vector, vocab.all_words))) # pretrained_weight is a numpy matrix of shape (num_embeddings, embedding_dim)
         #self.embed.weight.data.copy_(torch.from_numpy(pretrained_weight))
