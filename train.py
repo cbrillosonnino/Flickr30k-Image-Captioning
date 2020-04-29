@@ -114,6 +114,7 @@ def main():
         file.close()
 
     for epoch in range(start_epoch, 20):
+
         print('Epoch {}'.format(epoch+1))
         print('training...')
         for i, (images, captions, lengths) in enumerate(train_loader):
@@ -152,6 +153,8 @@ def main():
                 learning_rate /= 5
                 for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
+        encoder.eval()
+        decoder.eval()
         print('validating...')
         curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
         is_best = curr_BLEU > max_BLEU
@@ -168,9 +171,13 @@ def main():
         file.write('{},{},{} \n'.format(XEntropy.avg,PPL.avg,curr_BLEU))
         file.close()
 
+    checkpoint = torch.load(f'{args.save}/model_best.pth.tar')
+    encoder.load_state_dict(checkpoint['encoder'])
+    decoder.load_state_dict(checkpoint['decoder'])
+
     params = list(encoder.parameters()) + list(decoder.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
-
+    
     for epoch in range(20, args.epoch):
         print('Epoch {}'.format(epoch+1))
         print('training...')
@@ -209,6 +216,8 @@ def main():
             learning_rate /= 5
             for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
+        encoder.eval()
+        decoder.eval()
         print('validating...')
         curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
         is_best = curr_BLEU > max_BLEU
