@@ -75,14 +75,14 @@ def main():
             dataset=Custom_Flickr30k('../flickr30k-images','../flickr30k-captions/results_20130124.token', vocab, transform=train_transform, train=True),
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=NUM_WORKERS,
+            num_workers=NUM_WORKERS, pin_memory=True,
             collate_fn=collate_fn)
 
     val_loader = torch.utils.data.DataLoader(
             dataset=Custom_Flickr30k('../flickr30k-images','../flickr30k-captions/results_20130124.token', vocab, transform=val_transform, train=False),
             batch_size=args.batch_size,
             shuffle=False,
-            num_workers=NUM_WORKERS,
+            num_workers=NUM_WORKERS, pin_memory=True,
             collate_fn=collate_fn)
 
     # Initialize models
