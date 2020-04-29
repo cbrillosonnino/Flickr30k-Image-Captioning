@@ -121,6 +121,9 @@ def main():
         print('training...')
         for i, (images, captions, lengths) in enumerate(train_loader):
 
+            if i%100 ==  0:
+                print('[{}/{}]'.format(i,len(train_loader)))
+
             # Batch to device
             images = images.to(device)
             captions = captions.to(device)
