@@ -3,7 +3,7 @@ import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from math import sqrt
-import spacy
+#import spacy
 import numpy as np
 
 
