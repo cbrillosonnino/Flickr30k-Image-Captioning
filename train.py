@@ -46,7 +46,7 @@ def main():
 
     args = get_parser().parse_args()
 
-    NUM_WORKERS = 4
+    NUM_WORKERS = 2
     CROP_SIZE = 256
     NUM_PIXELS = 64
     ENCODER_SIZE = 2048
@@ -150,9 +150,10 @@ def main():
             PPL.update(np.exp(loss.item()), len(lengths))
         print('Train Perplexity = {}'.format(PPL.avg))
 
-        if epoch % 50 == 0:
-            learning_rate /= 5
-            for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
+        if epoch != 0:
+            if epoch % 10 == 0:
+                learning_rate /= 5
+                for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
         print('validating...')
         curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
