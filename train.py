@@ -30,7 +30,7 @@ def get_parser():
                         help='number of training epochs')
     parser.add_argument('-fine_tune', type=bool, default=True,
                         help='whether to fine-tune the encoder or not')
-    parser.add_argument('-lr', type=float, default=0.005,
+    parser.add_argument('-lr', type=float, default=0.01,
                         help='initial learning rate')
     parser.add_argument('--save', type=str, default=Path.cwd(),
                         help='directory to save logs and models.')
