@@ -18,7 +18,7 @@ from BLEU import bleu_eval
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Flickr30k Training')
-    parser.add_argument('-batch_size', type=int, default=256,
+    parser.add_argument('-batch_size', type=int, default=32,
                         help='batch size')
     parser.add_argument('-hid_size', type=int, default=512,
                         help='hidden demension size')
@@ -26,11 +26,11 @@ def get_parser():
                         help='attention demension size')
     parser.add_argument('-drop', type=float, default=0.5,
                         help='dropout percentage')
-    parser.add_argument('-epoch', type=int, default=200,
+    parser.add_argument('-epoch', type=int, default=30,
                         help='number of training epochs')
     parser.add_argument('-fine_tune', type=bool, default=True,
                         help='whether to fine-tune the encoder or not')
-    parser.add_argument('-lr', type=float, default=0.01,
+    parser.add_argument('-lr', type=float, default=0.005,
                         help='initial learning rate')
     parser.add_argument('--save', type=str, default=Path.cwd(),
                         help='directory to save logs and models.')
@@ -86,7 +86,7 @@ def main():
             collate_fn=collate_fn)
 
     # Initialize models
-    encoder = EncoderCNN(args.fine_tune).to(device)
+    encoder = EncoderCNN().to(device)
     decoder = DecoderRNNwithAttention(vocab, args.hid_size, 1, args.attn_size, ENCODER_SIZE, NUM_PIXELS, dropout=args.drop).to(device)
 
     # Initialize optimization
@@ -121,6 +121,7 @@ def main():
 
             if i%10 ==  0:
                 print('[{}/{}]'.format(i,len(train_loader)))
+                print(PPL.avg)
 
             # Batch to device
             images = images.to(device)
@@ -149,7 +150,7 @@ def main():
         print('Train Perplexity = {}'.format(PPL.avg))
 
         if epoch != 0:
-            if epoch % 10 == 0:
+            if epoch % 5 == 0:
                 learning_rate /= 5
                 for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
@@ -177,7 +178,7 @@ def main():
 
     params = list(encoder.parameters()) + list(decoder.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
-    
+
     for epoch in range(20, args.epoch):
         print('Epoch {}'.format(epoch+1))
         print('training...')
