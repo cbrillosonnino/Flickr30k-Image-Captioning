@@ -121,7 +121,7 @@ def main():
 
             if i%10 ==  0:
                 print('[{}/{}]'.format(i,len(train_loader)))
-                print(PPL.avg)
+                # print(PPL.avg)
 
             # Batch to device
             images = images.to(device)
@@ -150,7 +150,7 @@ def main():
         print('Train Perplexity = {}'.format(PPL.avg))
 
         if epoch != 0:
-            if epoch % 5 == 0:
+            if epoch % 7 == 0:
                 learning_rate /= 5
                 for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
@@ -186,6 +186,7 @@ def main():
 
             if i%10 ==  0:
                 print('[{}/{}]'.format(i,len(train_loader)))
+                # print(PPL.avg)
 
             # Batch to device
             images = images.to(device)

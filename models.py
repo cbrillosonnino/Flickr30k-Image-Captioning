@@ -3,7 +3,7 @@ import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from math import sqrt
-import spacy
+#import spacy
 import numpy as np
 
 
@@ -107,12 +107,12 @@ class DecoderRNNwithAttention(nn.Module):
         self.num_pixels = num_pixels
         self.dropout = nn.Dropout(p=dropout)
 
-        nlp = spacy.load('en_core_web_md') # very slow
-        _, self.embed_size = nlp.vocab.vectors.shape
-        # self.embed_size = 256
+        #nlp = spacy.load('en_core_web_md') # very slow
+        #_, self.embed_size = nlp.vocab.vectors.shape
+        self.embed_size = 256
         self.embed = nn.Embedding(self.vocab_size, self.embed_size, 0)
-        pretrained_weight = np.array(list(map(lambda x: nlp(x).vector, vocab.all_words))) # pretrained_weight is a numpy matrix of shape (num_embeddings, embedding_dim)
-        self.embed.weight.data.copy_(torch.from_numpy(pretrained_weight))
+        #pretrained_weight = np.array(list(map(lambda x: nlp(x).vector, vocab.all_words))) # pretrained_weight is a numpy matrix of shape (num_embeddings, embedding_dim)
+        #self.embed.weight.data.copy_(torch.from_numpy(pretrained_weight))
 
         self.pool = nn.AvgPool2d(int(sqrt(num_pixels)))
         self.init_hidden = nn.Linear(self.encoder_size, self.hidden_size)
