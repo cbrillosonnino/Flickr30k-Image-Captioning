@@ -8,7 +8,7 @@ def bleu_eval(encoder, decoder, data_loader, batch_size, device):
         true_outputs = [] # e.g: [[ref1_1, ref1_2], [ref2_1, ...], ....]
         decoder_outputs = [] # e.g: [out1, out2, out3]
         for i, (images, captions, lengths) in enumerate(data_loader):
-            
+
             if i > 0:
                 break
             if i * batch_size >= 10000 or len(images) != batch_size:
@@ -30,7 +30,7 @@ def bleu_eval(encoder, decoder, data_loader, batch_size, device):
 
             features = encoder(images)
             outputs = decoder(features, captions, lengths)
-            sample = decoder.sample(features, max_seq_length=np.shape(captions)[1]).cpu()
+            sample = decoder.sample(features, max_seq_length=20).cpu()
             decoder_outputs.extend(sample.numpy().astype(str).tolist())
 
         predictions = []

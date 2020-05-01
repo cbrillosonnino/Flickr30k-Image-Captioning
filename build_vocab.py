@@ -9,7 +9,7 @@ import os
 
 def build_vocab(ann_file = '../flickr30k-captions/results_20130124.token', threshold = 3):
     """Build a simple vocabulary wrapper."""
-    punc_set = set([',',';',':','.','?','!','(',')'])
+    punc_set = set([',',';',':','.','?','!','(',')','"','``'])
     counter = Counter()
     caption_list = []
     split = pickle.load(open('train_set.p', 'rb'))
