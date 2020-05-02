@@ -4,6 +4,8 @@ import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from math import sqrt
 from beam import BeamNode
+import spacy
+import numpy as np
 
 
 class SimpleEncoderCNN(nn.Module):
@@ -57,19 +59,14 @@ class SimpleDecoderRNN(nn.Module):
         return sampled_ids
 
 class EncoderCNN(nn.Module):
-    def __init__(self, fine_tune=False):
+    def __init__(self):
         super(EncoderCNN, self).__init__()
-        self.fine_tune = fine_tune
-        resnet = models.resnet50(pretrained=True)
+        resnet = models.resnet152(pretrained=True) # switch from resnet50 to resnet152?
         modules = list(resnet.children())[:-2]      # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
 
     def forward(self, images):
-        if self.fine_tune:
-            features = self.resnet(images)
-        else:
-            with torch.no_grad():
-                features = self.resnet(images)
+        features = self.resnet(images)
 
         return features
 
@@ -92,7 +89,7 @@ class AttentionLayer(nn.Module):
 
         encoder_attn = self.encoder_transform (features)
         decoder_attn = self.decoder_transform(decoder_hidden)
-        similarity_score = encoder_attn * decoder_attn.unsqueeze(1)
+        similarity_score = encoder_attn + decoder_attn.unsqueeze(1)
         attention_scores = self.linear(self.relu(similarity_score))
         attention_weights = self.softmax(attention_scores.squeeze(2))
         output = (features * attention_weights.unsqueeze(2)).sum(dim=1)
@@ -100,11 +97,10 @@ class AttentionLayer(nn.Module):
         return output, attention_weights #(batch_size, encoder_size), (batch_size, number_of pixels)
 
 class DecoderRNNwithAttention(nn.Module):
-    def __init__(self, vocab_size, embed_size, hidden_size, num_layers, attention_size, encoder_size=2048, num_pixels = 64, dropout=0.5):
+    def __init__(self, vocab, hidden_size, num_layers, attention_size, encoder_size=2048, num_pixels = 64, dropout=0.5):
         super().__init__()
         # Arguments
-        self.vocab_size = vocab_size
-        self.embed_size = embed_size
+        self.vocab_size = len(vocab)
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.attention_size = attention_size
@@ -112,7 +108,12 @@ class DecoderRNNwithAttention(nn.Module):
         self.num_pixels = num_pixels
         self.dropout = nn.Dropout(p=dropout)
 
+        nlp = spacy.load('en_core_web_md') # very slow
+        _, self.embed_size = nlp.vocab.vectors.shape
+        #self.embed_size = 256
         self.embed = nn.Embedding(self.vocab_size, self.embed_size, 0)
+        pretrained_weight = np.array(list(map(lambda x: nlp(x).vector, vocab.all_words))) # pretrained_weight is a numpy matrix of shape (num_embeddings, embedding_dim)
+        self.embed.weight.data.copy_(torch.from_numpy(pretrained_weight))
 
         self.pool = nn.AvgPool2d(int(sqrt(num_pixels)))
         self.init_hidden = nn.Linear(self.encoder_size, self.hidden_size)

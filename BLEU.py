@@ -3,15 +3,12 @@ import nltk
 import numpy as np
 import torch
 
-def bleu_eval(encoder, decoder, data_loader, batch_size):
+def bleu_eval(encoder, decoder, data_loader, batch_size, device):
     with torch.no_grad():
         true_outputs = [] # e.g: [[ref1_1, ref1_2], [ref2_1, ...], ....]
         decoder_outputs = [] # e.g: [out1, out2, out3]
         for i, (images, captions, lengths) in enumerate(data_loader):
-            if i > 0:
-                break
-            if i * batch_size >= 10000 or len(images) != batch_size:
-                continue
+            
             for caption in captions:
                 caption = caption.numpy().astype(str).tolist()
                 idx = 0
@@ -23,11 +20,15 @@ def bleu_eval(encoder, decoder, data_loader, batch_size):
                     elif tok != '0': # '<pad>'
                         curr_img_captions[idx].append(tok)
                 true_outputs.append(curr_img_captions)
+
+            images = images.to(device)
+            captions = captions.to(device)
+
             features = encoder(images)
-            outputs = decoder(features, captions, lengths)
-            sample = decoder.sample(features, max_seq_length=np.shape(captions)[1])
+            max_sequence_length = int(np.array(captions != 0).sum(axis = 1).mean()+1)
+            sample = decoder.sample(features, max_seq_length=max_sequence_length).cpu()
             decoder_outputs.extend(sample.numpy().astype(str).tolist())
-            
+
         predictions = []
         for pred in decoder_outputs:
             curr = []
@@ -36,4 +37,4 @@ def bleu_eval(encoder, decoder, data_loader, batch_size):
                     break
                 curr.append(tok)
             predictions.append(curr)
-        return nltk.bleu_score.corpus_bleu(true_outputs, predictions, weights=(0.33, 0.33, 0.33, 0.0))
+        return predictions, nltk.bleu_score.corpus_bleu(true_outputs, predictions, weights=(0.33, 0.33, 0.33, 0.0))

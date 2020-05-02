@@ -1,5 +1,6 @@
 import argparse, os
 from pathlib import Path
+import shutil
 
 import torch
 import torch.nn as nn
@@ -17,17 +18,15 @@ from BLEU import bleu_eval
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Flickr30k Training')
-    parser.add_argument('-batch_size', type=int, default=512,
+    parser.add_argument('-batch_size', type=int, default=32,
                         help='batch size')
-    parser.add_argument('-embed_size', type=int, default=256,
-                        help='embedding demension size')
     parser.add_argument('-hid_size', type=int, default=512,
                         help='hidden demension size')
     parser.add_argument('-attn_size', type=int, default=512,
                         help='attention demension size')
     parser.add_argument('-drop', type=float, default=0.5,
                         help='dropout percentage')
-    parser.add_argument('-epoch', type=int, default=300,
+    parser.add_argument('-epoch', type=int, default=30,
                         help='number of training epochs')
     parser.add_argument('-fine_tune', type=bool, default=True,
                         help='whether to fine-tune the encoder or not')
@@ -47,14 +46,15 @@ def main():
 
     args = get_parser().parse_args()
 
-    NUM_WORKERS = 4
+    NUM_WORKERS = 2
     CROP_SIZE = 256
     NUM_PIXELS = 64
     ENCODER_SIZE = 2048
+    ALPHA = 1.  # attention regularization parameter
     learning_rate = args.lr
     start_epoch = 0
 
-    min_BLEU = 1_000_000
+    max_BLEU = 0
 
     vocab = pickle.load(open('vocab.p', 'rb'))
 
@@ -75,33 +75,31 @@ def main():
             dataset=Custom_Flickr30k('../flickr30k-images','../flickr30k-captions/results_20130124.token', vocab, transform=train_transform, train=True),
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=NUM_WORKERS,
+            num_workers=NUM_WORKERS, pin_memory=True,
             collate_fn=collate_fn)
 
     val_loader = torch.utils.data.DataLoader(
             dataset=Custom_Flickr30k('../flickr30k-images','../flickr30k-captions/results_20130124.token', vocab, transform=val_transform, train=False),
             batch_size=args.batch_size,
             shuffle=False,
-            num_workers=NUM_WORKERS,
+            num_workers=NUM_WORKERS, pin_memory=True,
             collate_fn=collate_fn)
 
     # Initialize models
-    encoder = EncoderCNN(args.fine_tune).to(device)
-    decoder = DecoderRNNwithAttention(len(vocab), args.embed_size, args.hid_size, 1, args.attn_size, ENCODER_SIZE, NUM_PIXELS, dropout=args.drop).to(device)
+    encoder = EncoderCNN().to(device)
+    decoder = DecoderRNNwithAttention(vocab, args.hid_size, 1, args.attn_size, ENCODER_SIZE, NUM_PIXELS, dropout=args.drop).to(device)
 
     # Initialize optimization
     criterion = torch.nn.CrossEntropyLoss()
-    if args.fine_tune:
-        params = list(encoder.parameters()) + list(decoder.parameters())
-    else:
-        params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
+    decoder.embed.weight.requires_grad = False
+    params = list(decoder.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
 
     if args.resume:
         if os.path.isfile(args.resume):
             checkpoint = torch.load(args.resume)
             start_epoch = checkpoint['epoch']
-            min_BLEU = checkpoint['min_BLEU']
+            max_BLEU = checkpoint['max_BLEU']
             encoder.load_state_dict(checkpoint['encoder'])
             decoder.load_state_dict(checkpoint['decoder'])
             optimizer.load_state_dict(checkpoint['optimizer'])
@@ -111,17 +109,25 @@ def main():
     PPL = AverageMeter()
 
     # Save
-    file = open(f'{args.save}/resuts.txt','a')
-    file.write('Loss,PPL,BLEU \n')
-    file.close()
+    if not args.resume:
+        file = open(f'{args.save}/resuts.txt','a')
+        file.write('Loss,PPL,BLEU \n')
+        file.close()
 
-    for epoch in range(start_epoch, args.epoch):
+    for epoch in range(start_epoch, 25):
+
         print('Epoch {}'.format(epoch+1))
         print('training...')
-        for i, (images, captions, lengths) in enumerate(train_loader):
+        for i, (images, captions, lengths) in tqdm(enumerate(train_loader)):
+
+            # if i%10 ==  0:
+            #     print('[{}/{}]'.format(i,len(train_loader)))
+            #     print(PPL.avg)
+
             # Batch to device
             images = images.to(device)
             captions = captions.to(device)
+            lengths.to(device)
             targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             encoder.train()
@@ -130,10 +136,12 @@ def main():
             features = encoder(images)
             predictions, attention_weights = decoder(features, captions, lengths)
 
-            scores = pack_padded_sequence(predictions[:,:-1,:], torch.tensor(lengths)-2, batch_first=True).cpu()
-            targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True).cpu()
+            scores = pack_padded_sequence(predictions[:,:-1,:], torch.tensor(lengths)-2, batch_first=True)
+            targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True)
 
             loss = criterion(scores.data, targets.data)
+            loss += ALPHA * ((1. - attention_weights.sum(dim=1)) ** 2).mean()
+
             decoder.zero_grad()
             encoder.zero_grad()
             loss.backward()
@@ -143,18 +151,20 @@ def main():
             PPL.update(np.exp(loss.item()), len(lengths))
         print('Train Perplexity = {}'.format(PPL.avg))
 
-        if epoch % 50 == 0:
-            learning_rate /= 5
+        if epoch+1 % 10 == 0:
+            learning_rate /= 10
             for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
+        encoder.eval()
+        decoder.eval()
         print('validating...')
-        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size)
-        is_best = curr_BLEU < min_BLEU
-        min_BLEU = max(curr_BLEU, min_BLEU)
+        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
+        is_best = curr_BLEU > max_BLEU
+        max_BLEU = max(curr_BLEU, max_BLEU)
         save_checkpoint({
             'epoch': epoch + 1, 'encoder': encoder.state_dict(), 'decoder': decoder.state_dict(),
-            'min_BLEU': min_BLEU, 'optimizer' : optimizer.state_dict(),
-        }, is_best)
+            'max_BLEU': max_BLEU, 'optimizer' : optimizer.state_dict(),
+        }, is_best, args.save)
 
         print('Validation BLEU = {}'.format(curr_BLEU))
 
@@ -162,6 +172,73 @@ def main():
         file = open(f'{args.save}/resuts.txt','a')
         file.write('{},{},{} \n'.format(XEntropy.avg,PPL.avg,curr_BLEU))
         file.close()
+
+    checkpoint = torch.load(f'{args.save}/model_best.pth.tar')
+    encoder.load_state_dict(checkpoint['encoder'])
+    decoder.load_state_dict(checkpoint['decoder'])
+    decoder.embed.weight.requires_grad = True
+    learning_rate = 0.001
+    params = list(encoder.parameters()) + list(decoder.parameters())
+    optimizer = torch.optim.Adam(params, lr=learning_rate)
+
+    for epoch in range(25, args.epoch):
+        print('Epoch {}'.format(epoch+1))
+        print('training...')
+        for i, (images, captions, lengths) in tqdm(enumerate(train_loader)):
+
+            if i%10 ==  0:
+                print('[{}/{}]'.format(i,len(train_loader)))
+                print(PPL.avg)
+
+            # Batch to device
+            images = images.to(device)
+            captions = captions.to(device)
+            lengths.to(device)
+            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+
+            encoder.train()
+            decoder.train()
+
+            features = encoder(images)
+            predictions, attention_weights = decoder(features, captions, lengths)
+
+            scores = pack_padded_sequence(predictions[:,:-1,:], torch.tensor(lengths)-2, batch_first=True)
+            targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True)
+
+            loss = criterion(scores.data, targets.data)
+            loss += ALPHA * ((1. - attention_weights.sum(dim=1)) ** 2).mean()
+
+            decoder.zero_grad()
+            encoder.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            XEntropy.update(loss.item(), len(lengths))
+            PPL.update(np.exp(loss.item()), len(lengths))
+        print('Train Perplexity = {}'.format(PPL.avg))
+
+        if epoch+1 % 10 == 0:
+            learning_rate /= 10
+            for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
+
+        encoder.eval()
+        decoder.eval()
+        print('validating...')
+        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
+        is_best = curr_BLEU > max_BLEU
+        max_BLEU = max(curr_BLEU, max_BLEU)
+        save_checkpoint({
+            'epoch': epoch + 1, 'encoder': encoder.state_dict(), 'decoder': decoder.state_dict(),
+            'max_BLEU': max_BLEU, 'optimizer' : optimizer.state_dict(),
+        }, is_best, args.save)
+
+        print('Validation BLEU = {}'.format(curr_BLEU))
+
+        # Save
+        file = open(f'{args.save}/resuts.txt','a')
+        file.write('{},{},{} \n'.format(XEntropy.avg,PPL.avg,curr_BLEU))
+        file.close()
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -181,10 +258,10 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, save, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, f'{args.save_dir}/model_best.pth.tar')
+        shutil.copyfile(filename, f'{save}/model_best.pth.tar')
 
 
 if __name__ == '__main__': main()
