@@ -49,5 +49,5 @@ def print_beam_outputs(beams, vocab, num_to_print = 10):
         print('')
         print('Predicted Captions:')
         for idx in sorted_beam_idxs:
-            print(' '.join([vocab.idx2word[tok] for tok in beams[idx].seq[i]]))
+            print(' '.join([vocab.idx2word[int(tok)] for tok in beams[idx].seq[i]]))
         

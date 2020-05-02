@@ -215,7 +215,7 @@ class DecoderRNNwithAttention(nn.Module):
             # initialize list of current beams
             curr_beams = [BeamNode(word_ids = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size).long(),
                                     scores = torch.Tensor([0]).long().to(self.embed.weight.device).expand(batch_size).long(),
-                                    seq = [[1] for _ in range(batch_size)])]
+                                    seq = [['1'] for _ in range(batch_size)])]
             
             for i in range(max_seq_length):
                 next_candidates = [[] for _ in range(batch_size)] # stores tuples of (score, word_idx, sequence)
@@ -237,7 +237,7 @@ class DecoderRNNwithAttention(nn.Module):
                             next_candidates[j].append(
                                 (beam.scores[j].item() + topv[j][k].item(), 
                                  topi[j][k].item(), 
-                                 beam.seq[j] + [topi[j][k].item()])
+                                 beam.seq[j] + [str(topi[j][k].item())])
                             )
                             if len(next_candidates[j]) > beam_size:
                                 next_candidates[j].remove(min(next_candidates[j])) # only the top `beam_size` candidates are needed
