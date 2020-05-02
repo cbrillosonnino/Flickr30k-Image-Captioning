@@ -3,6 +3,7 @@ import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from math import sqrt
+from beam import BeamNode
 
 
 class SimpleEncoderCNN(nn.Module):
@@ -194,3 +195,68 @@ class DecoderRNNwithAttention(nn.Module):
                 return predictions, attention_weights
             else:
                 return predictions
+
+    def beam_sample(self, features, targets=None, imgs=None, beam_size=3, max_seq_length=20, return_attention = False):
+        """Beam Search"""
+        with torch.no_grad():
+            batch_size = features.size(0)
+
+            init_features = self.pool(features).squeeze()
+            hidden = self.init_hidden(init_features)
+            memory = self.init_memory(init_features)
+
+            features = features.permute(0, 2, 3, 1)
+            features  = features.view(batch_size, -1, self.encoder_size)
+
+            predictions = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size, 1).long()
+            attention_weights = torch.zeros(batch_size, max_seq_length, self.num_pixels).to(self.embed.weight.device)
+            
+            # initialize list of current beams
+            curr_beams = [BeamNode(word_ids = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size).long(),
+                                    scores = torch.Tensor([0]).long().to(self.embed.weight.device).expand(batch_size).long(),
+                                    seq = [[1] for _ in range(batch_size)])]
+            
+            for i in range(max_seq_length):
+                next_candidates = [[] for _ in range(batch_size)] # stores tuples of (score, word_idx, sequence)
+                
+                # for each current beam, generate the next `beam_size` best beams.
+                # of the `beam_size` * `beam_size` beams generated, only keep the top `beam_size` beams.
+                for beam in curr_beams:
+                    embeddings = self.embed(beam.word_ids)
+                    attention_weighted_encoding, attention_weight = self.attention(features, hidden)
+                    gate = self.sigmoid(self.beta(hidden))
+                    attention_weighted_encoding = gate * attention_weighted_encoding
+                    hidden, memory = self.lstm(
+                        torch.cat([embeddings, attention_weighted_encoding], dim=1),
+                        (hidden, memory))  # (batch_size_t, decoder_dim)
+                    out = self.out(self.dropout(hidden))
+                    topv, topi = out.topk(beam_size) # topv = topk scores, topi = topk idxs
+                    for k in range(beam_size):
+                        for j in range(batch_size):
+                            next_candidates[j].append(
+                                (beam.scores[j].item() + topv[j][k].item(), 
+                                 topi[j][k].item(), 
+                                 beam.seq[j] + [topi[j][k].item()])
+                            )
+                            if len(next_candidates[j]) > beam_size:
+                                next_candidates[j].remove(min(next_candidates[j])) # only the top `beam_size` candidates are needed
+                curr_beams = [] # reset curr_beams list, create new one from next_candidates
+                for k in range(beam_size):
+                    word_ids = [next_candidates[j][k][1] for j in range(batch_size)]
+                    scores = [next_candidates[j][k][0] for j in range(batch_size)]
+                    seq = [next_candidates[j][k][2] for j in range(batch_size)]
+                    curr_beams.append(BeamNode(word_ids = torch.LongTensor(word_ids),
+                                              scores = torch.FloatTensor(scores),
+                                              seq = seq))
+                    
+                attention_weights[:, i, :] = attention_weight
+            # set imgs/targets if provided
+            for beam in curr_beams:
+                if type(imgs) != type(None):
+                    beam.add_imgs(imgs)
+                if type(targets) != type(None):
+                    beam.add_targets(targets)
+            if return_attention:
+                return curr_beams, attention_weights
+            else:
+                return curr_beams
