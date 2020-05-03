@@ -241,20 +241,13 @@ class DecoderRNNwithAttention(nn.Module):
                     #              topi[j][k].item(),
                     #              beam.seq[j] + [str(topi[j][k].item())])
                     #         )
-                    
                     #         if len(next_candidates[j]) > beam_size: 
                     #             next_candidates[j].remove(min(next_candidates[j])) # only the top `beam_size` candidates are needed
                     
-
                     for j in range(batch_size):
                         next_candidates[j] += [(beam.scores[j].item()+topv[j][k].item(),
                                                   topi[j][k].item(), beam.seq[j] + [str(topi[j][k].item())]) for k in range(beam_size)]
                     
-                    topv = topv.numpy()
-                    topi = topi.numpy()
-                    for j in range(batch_size):
-                        next_candidates[j] += [(beam.scores[j].item()+topv[j][k],
-                                                  topi[j][k], beam.seq[j] + [str(topi[j][k])]) for k in range(beam_size)]
                         
                 next_candidates = [sorted(next_cand)[-beam_size:] for next_cand in next_candidates]
                 
