@@ -4,7 +4,7 @@ import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from math import sqrt
 from beam import BeamNode
-import spacy
+# import spacy
 import numpy as np
 
 
@@ -108,12 +108,12 @@ class DecoderRNNwithAttention(nn.Module):
         self.num_pixels = num_pixels
         self.dropout = nn.Dropout(p=dropout)
 
-        nlp = spacy.load('en_core_web_md') # very slow
-        _, self.embed_size = nlp.vocab.vectors.shape
-        #self.embed_size = 256
+        # nlp = spacy.load('en_core_web_md') # very slow
+        # _, self.embed_size = nlp.vocab.vectors.shape
+        self.embed_size = 320
         self.embed = nn.Embedding(self.vocab_size, self.embed_size, 0)
-        pretrained_weight = np.array(list(map(lambda x: nlp(x).vector, vocab.all_words))) # pretrained_weight is a numpy matrix of shape (num_embeddings, embedding_dim)
-        self.embed.weight.data.copy_(torch.from_numpy(pretrained_weight))
+        # pretrained_weight = np.array(list(map(lambda x: nlp(x).vector, vocab.all_words))) # pretrained_weight is a numpy matrix of shape (num_embeddings, embedding_dim)
+        # self.embed.weight.data.copy_(torch.from_numpy(pretrained_weight))
 
         self.pool = nn.AvgPool2d(int(sqrt(num_pixels)))
         self.init_hidden = nn.Linear(self.encoder_size, self.hidden_size)
@@ -211,15 +211,15 @@ class DecoderRNNwithAttention(nn.Module):
 
             predictions = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size, 1).long()
             attention_weights = torch.zeros(batch_size, max_seq_length, self.num_pixels).to(self.embed.weight.device)
-            
+
             # initialize list of current beams
             curr_beams = [BeamNode(word_ids = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size).long(),
                                     scores = torch.Tensor([0]).long().to(self.embed.weight.device).expand(batch_size).long(),
                                     seq = [['1'] for _ in range(batch_size)])]
-            
+
             for i in range(max_seq_length):
                 next_candidates = [[] for _ in range(batch_size)] # stores tuples of (score, word_idx, sequence)
-                
+
                 # for each current beam, generate the next `beam_size` best beams.
                 # of the `beam_size` * `beam_size` beams generated, only keep the top `beam_size` beams.
                 for beam in curr_beams:
@@ -235,8 +235,8 @@ class DecoderRNNwithAttention(nn.Module):
                     for k in range(beam_size):
                         for j in range(batch_size):
                             next_candidates[j].append(
-                                (beam.scores[j].item() + topv[j][k].item(), 
-                                 topi[j][k].item(), 
+                                (beam.scores[j].item() + topv[j][k].item(),
+                                 topi[j][k].item(),
                                  beam.seq[j] + [str(topi[j][k].item())])
                             )
                             if len(next_candidates[j]) > beam_size:
@@ -249,7 +249,7 @@ class DecoderRNNwithAttention(nn.Module):
                     curr_beams.append(BeamNode(word_ids = torch.LongTensor(word_ids),
                                               scores = torch.FloatTensor(scores),
                                               seq = seq))
-                    
+
                 attention_weights[:, i, :] = attention_weight
             # set imgs/targets if provided
             for beam in curr_beams:

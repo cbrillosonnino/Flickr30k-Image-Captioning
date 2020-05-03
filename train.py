@@ -72,14 +72,14 @@ def main():
                                  (0.285, 0.277, 0.286))])
 
     train_loader = torch.utils.data.DataLoader(
-            dataset=Custom_Flickr30k('../flickr30k-images','../flickr30k-captions/results_20130124.token', vocab, transform=train_transform, train=True),
+            dataset=Custom_Flickr30k('flickr30k-images/flickr30k-images','flickr30k-captions/results_20130124.token', vocab, transform=train_transform, train=True),
             batch_size=args.batch_size,
             shuffle=True,
             num_workers=NUM_WORKERS, pin_memory=True,
             collate_fn=collate_fn)
 
     val_loader = torch.utils.data.DataLoader(
-            dataset=Custom_Flickr30k('../flickr30k-images','../flickr30k-captions/results_20130124.token', vocab, transform=val_transform, train=False),
+            dataset=Custom_Flickr30k('flickr30k-images/flickr30k-images','flickr30k-captions/results_20130124.token', vocab, transform=val_transform, train=False),
             batch_size=args.batch_size,
             shuffle=False,
             num_workers=NUM_WORKERS, pin_memory=True,
@@ -91,7 +91,7 @@ def main():
 
     # Initialize optimization
     criterion = torch.nn.CrossEntropyLoss()
-    decoder.embed.weight.requires_grad = False
+    #decoder.embed.weight.requires_grad = False
     params = list(decoder.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
 
@@ -114,15 +114,15 @@ def main():
         file.write('Loss,PPL,BLEU \n')
         file.close()
 
-    for epoch in range(start_epoch, 25):
+    for epoch in range(start_epoch, 30):
 
         print('Epoch {}'.format(epoch+1))
         print('training...')
-        for i, (images, captions, lengths) in tqdm(enumerate(train_loader)):
+        for i, (images, captions, lengths) in enumerate(train_loader):
 
-            # if i%10 ==  0:
-            #     print('[{}/{}]'.format(i,len(train_loader)))
-            #     print(PPL.avg)
+            if i%10 ==  0:
+                print('[{}/{}]'.format(i,len(train_loader)))
+                print(PPL.avg)
 
             # Batch to device
             images = images.to(device)
@@ -136,8 +136,8 @@ def main():
             features = encoder(images)
             predictions, attention_weights = decoder(features, captions, lengths)
 
-            scores = pack_padded_sequence(predictions[:,:-1,:], torch.tensor(lengths)-2, batch_first=True)
-            targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True)
+            scores = pack_padded_sequence(predictions[:,:-1,:], lengths-2, batch_first=True)
+            targets = pack_padded_sequence(captions[:,1:-1], lengths-2, batch_first=True)
 
             loss = criterion(scores.data, targets.data)
             loss += ALPHA * ((1. - attention_weights.sum(dim=1)) ** 2).mean()
@@ -176,15 +176,15 @@ def main():
     checkpoint = torch.load(f'{args.save}/model_best.pth.tar')
     encoder.load_state_dict(checkpoint['encoder'])
     decoder.load_state_dict(checkpoint['decoder'])
-    decoder.embed.weight.requires_grad = True
+    #decoder.embed.weight.requires_grad = True
     learning_rate = 0.001
     params = list(encoder.parameters()) + list(decoder.parameters())
     optimizer = torch.optim.Adam(params, lr=learning_rate)
 
-    for epoch in range(25, args.epoch):
+    for epoch in range(start_epoch, args.epoch):
         print('Epoch {}'.format(epoch+1))
         print('training...')
-        for i, (images, captions, lengths) in tqdm(enumerate(train_loader)):
+        for i, (images, captions, lengths) in enumerate(train_loader):
 
             if i%10 ==  0:
                 print('[{}/{}]'.format(i,len(train_loader)))
@@ -202,8 +202,8 @@ def main():
             features = encoder(images)
             predictions, attention_weights = decoder(features, captions, lengths)
 
-            scores = pack_padded_sequence(predictions[:,:-1,:], torch.tensor(lengths)-2, batch_first=True)
-            targets = pack_padded_sequence(captions[:,1:-1], torch.tensor(lengths)-2, batch_first=True)
+            scores = pack_padded_sequence(predictions[:,:-1,:], lengths-2, batch_first=True)
+            targets = pack_padded_sequence(captions[:,1:-1], lengths-2, batch_first=True)
 
             loss = criterion(scores.data, targets.data)
             loss += ALPHA * ((1. - attention_weights.sum(dim=1)) ** 2).mean()
@@ -217,7 +217,7 @@ def main():
             PPL.update(np.exp(loss.item()), len(lengths))
         print('Train Perplexity = {}'.format(PPL.avg))
 
-        if epoch+1 % 10 == 0:
+        if epoch+1 % 5 == 0:
             learning_rate /= 10
             for param_group in optimizer.param_groups: param_group['lr'] = learning_rate
 
