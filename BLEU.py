@@ -9,7 +9,7 @@ def bleu_eval(encoder, decoder, data_loader, batch_size, device, beam_size=None)
         decoder_outputs = [] # e.g: [out1, out2, out3]
         for i, (images, captions, lengths) in enumerate(data_loader):
             for caption in captions:
-                caption = caption.numpy().astype(str).tolist()
+                caption = caption.cpu().numpy().astype(str).tolist()
                 idx = 0
                 curr_img_captions = [[]] # e.g: [ref1_1, ref1_2, ...]
                 for tok in caption[1:-1]:
@@ -24,13 +24,13 @@ def bleu_eval(encoder, decoder, data_loader, batch_size, device, beam_size=None)
             captions = captions.to(device)
 
             features = encoder(images)
-            max_sequence_length = int(np.array(captions != 0).sum(axis = 1).mean()+1)
+            max_sequence_length = 20
             if beam_size is None: # greedy
             	sample = decoder.sample(features, max_seq_length=max_sequence_length).cpu()
-            	decoder_outputs.extend(sample.numpy().astype(str).tolist())
+            	decoder_outputs.extend(sample.cpu().numpy().astype(str).tolist())
             else:
-                beams = decoder.beam_sample(features, 
-                    imgs=images, 
+                beams = decoder.beam_sample(features,
+                    imgs=images,
                     targets=captions,
                     beam_size=beam_size,
                     max_seq_length=max_sequence_length)
