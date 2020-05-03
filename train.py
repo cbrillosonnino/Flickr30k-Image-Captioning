@@ -158,7 +158,7 @@ def main():
         encoder.eval()
         decoder.eval()
         print('validating...')
-        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
+        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)[0]
         is_best = curr_BLEU > max_BLEU
         max_BLEU = max(curr_BLEU, max_BLEU)
         save_checkpoint({
@@ -224,7 +224,7 @@ def main():
         encoder.eval()
         decoder.eval()
         print('validating...')
-        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)
+        curr_BLEU = bleu_eval(encoder, decoder, val_loader, args.batch_size, device)[0]
         is_best = curr_BLEU > max_BLEU
         max_BLEU = max(curr_BLEU, max_BLEU)
         save_checkpoint({
