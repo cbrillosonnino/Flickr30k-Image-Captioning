@@ -216,10 +216,11 @@ class DecoderRNNwithAttention(nn.Module):
             curr_beams = [BeamNode(word_ids = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size).long(),
                                     scores = torch.Tensor([0]).long().to(self.embed.weight.device).expand(batch_size).long(),
                                     seq = [['1'] for _ in range(batch_size)])]
+            
 
             for i in range(max_seq_length):
                 next_candidates = [[] for _ in range(batch_size)] # stores tuples of (score, word_idx, sequence)
-
+                
                 # for each current beam, generate the next `beam_size` best beams.
                 # of the `beam_size` * `beam_size` beams generated, only keep the top `beam_size` beams.
                 for beam in curr_beams:
@@ -232,15 +233,31 @@ class DecoderRNNwithAttention(nn.Module):
                         (hidden, memory))  # (batch_size_t, decoder_dim)
                     out = self.out(self.dropout(hidden))
                     topv, topi = out.topk(beam_size) # topv = topk scores, topi = topk idxs
-                    for k in range(beam_size):
-                        for j in range(batch_size):
-                            next_candidates[j].append(
-                                (beam.scores[j].item() + topv[j][k].item(),
-                                 topi[j][k].item(),
-                                 beam.seq[j] + [str(topi[j][k].item())])
-                            )
-                            if len(next_candidates[j]) > beam_size:
-                                next_candidates[j].remove(min(next_candidates[j])) # only the top `beam_size` candidates are needed
+                    
+                    # for k in range(beam_size):
+                    #     for j in range(batch_size):
+                    #         next_candidates[j].append(
+                    #             (beam.scores[j].item() + topv[j][k].item(),
+                    #              topi[j][k].item(),
+                    #              beam.seq[j] + [str(topi[j][k].item())])
+                    #         )
+                    
+                    #         if len(next_candidates[j]) > beam_size: 
+                    #             next_candidates[j].remove(min(next_candidates[j])) # only the top `beam_size` candidates are needed
+                    
+
+                    for j in range(batch_size):
+                        next_candidates[j] += [(beam.scores[j].item()+topv[j][k].item(),
+                                                  topi[j][k].item(), beam.seq[j] + [str(topi[j][k].item())]) for k in range(beam_size)]
+                    
+                    topv = topv.numpy()
+                    topi = topi.numpy()
+                    for j in range(batch_size):
+                        next_candidates[j] += [(beam.scores[j].item()+topv[j][k],
+                                                  topi[j][k], beam.seq[j] + [str(topi[j][k])]) for k in range(beam_size)]
+                        
+                next_candidates = [sorted(next_cand)[-beam_size:] for next_cand in next_candidates]
+                
                 curr_beams = [] # reset curr_beams list, create new one from next_candidates
                 for k in range(beam_size):
                     word_ids = [next_candidates[j][k][1] for j in range(batch_size)]
@@ -249,7 +266,7 @@ class DecoderRNNwithAttention(nn.Module):
                     curr_beams.append(BeamNode(word_ids = torch.LongTensor(word_ids),
                                               scores = torch.FloatTensor(scores),
                                               seq = seq))
-
+                    
                 attention_weights[:, i, :] = attention_weight
             # set imgs/targets if provided
             for beam in curr_beams:

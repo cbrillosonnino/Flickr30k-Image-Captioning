@@ -1,0 +1,90 @@
+Timer unit: 1e-06 s
+
+Total time: 1.26072 s
+File: /mnt/c/Users/adc50/Documents/NYU/MSDS/Spring-2020/AdvancedPython/project/Flickr30k-Image-Captioning/models.py
+Function: beam_sample at line 200
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   200                                               def beam_sample(self, features, targets=None, imgs=None, beam_size=3, max_seq_length=20, return_attention = False):
+   201                                                   """Beam Search"""
+   202         1         23.0     23.0      0.0          with torch.no_grad():
+   203         1         10.0     10.0      0.0              batch_size = features.size(0)
+   204                                           
+   205         1       1579.0   1579.0      0.1              init_features = self.pool(features).squeeze()
+   206         1        605.0    605.0      0.0              hidden = self.init_hidden(init_features)
+   207         1        590.0    590.0      0.0              memory = self.init_memory(init_features)
+   208                                           
+   209         1         16.0     16.0      0.0              features = features.permute(0, 2, 3, 1)
+   210         1         11.0     11.0      0.0              features  = features.view(batch_size, -1, self.encoder_size)
+   211                                           
+   212         1         69.0     69.0      0.0              predictions = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size, 1).long()
+   213         1         29.0     29.0      0.0              attention_weights = torch.zeros(batch_size, max_seq_length, self.num_pixels).to(self.embed.weight.device)
+   214                                           
+   215                                                       # initialize list of current beams
+   216         2         32.0     16.0      0.0              curr_beams = [BeamNode(word_ids = torch.Tensor([1]).long().to(self.embed.weight.device).expand(batch_size).long(),
+   217         1         28.0     28.0      0.0                                      scores = torch.Tensor([0]).long().to(self.embed.weight.device).expand(batch_size).long(),
+   218         1         10.0     10.0      0.0                                      seq = [['1'] for _ in range(batch_size)])]
+   219                                                       
+   220                                           
+   221        21         58.0      2.8      0.0              for i in range(max_seq_length):
+   222        20        260.0     13.0      0.0                  next_candidates = [[] for _ in range(batch_size)] # stores tuples of (score, word_idx, sequence)
+   223                                                           
+   224                                                           # for each current beam, generate the next `beam_size` best beams.
+   225                                                           # of the `beam_size` * `beam_size` beams generated, only keep the top `beam_size` beams.
+   226        78        273.0      3.5      0.0                  for beam in curr_beams:
+   227        58       4139.0     71.4      0.3                      embeddings = self.embed(beam.word_ids)
+   228        58     893544.0  15405.9     70.9                      attention_weighted_encoding, attention_weight = self.attention(features, hidden)
+   229        58      32423.0    559.0      2.6                      gate = self.sigmoid(self.beta(hidden))
+   230        58       1616.0     27.9      0.1                      attention_weighted_encoding = gate * attention_weighted_encoding
+   231       116     145931.0   1258.0     11.6                      hidden, memory = self.lstm(
+   232        58       3000.0     51.7      0.2                          torch.cat([embeddings, attention_weighted_encoding], dim=1),
+   233        58        188.0      3.2      0.0                          (hidden, memory))  # (batch_size_t, decoder_dim)
+   234        58     106391.0   1834.3      8.4                      out = self.out(self.dropout(hidden))
+   235        58      15859.0    273.4      1.3                      topv, topi = out.topk(beam_size) # topv = topk scores, topi = topk idxs
+   236                                                               
+   237                                                               # for k in range(beam_size):
+   238                                                               #     for j in range(batch_size):
+   239                                                               #         next_candidates[j].append(
+   240                                                               #             (beam.scores[j].item() + topv[j][k].item(),
+   241                                                               #              topi[j][k].item(),
+   242                                                               #              beam.seq[j] + [str(topi[j][k].item())])
+   243                                                               #         )
+   244                                                               
+   245                                                               
+   246                                                               #         if len(next_candidates[j]) > beam_size: 
+   247                                                               #             next_candidates[j].remove(min(next_candidates[j])) # only the top `beam_size` candidates are needed
+   248                                                               
+   249                                           
+   250                                                               # for j in range(batch_size):
+   251                                                               #     next_candidates[j] += [(beam.scores[j].item()+topv[j][k].item(),
+   252                                                               #                               topi[j][k].item(), beam.seq[j] + [str(topi[j][k].item())]) for k in range(beam_size)]
+   253                                                               
+   254        58        560.0      9.7      0.0                      topv = topv.numpy()
+   255        58        231.0      4.0      0.0                      topi = topi.numpy()
+   256       986       2960.0      3.0      0.2                      for j in range(batch_size):
+   257      1856      42397.0     22.8      3.4                          next_candidates[j] += [(beam.scores[j].item()+topv[j][k],
+   258       928       2725.0      2.9      0.2                                                    topi[j][k], beam.seq[j] + [str(topi[j][k])]) for k in range(beam_size)]
+   259                                                                   
+   260        20       1253.0     62.6      0.1                  next_candidates = [sorted(next_cand)[-beam_size:] for next_cand in next_candidates]
+   261                                                           
+   262        20        215.0     10.8      0.0                  curr_beams = [] # reset curr_beams list, create new one from next_candidates
+   263        80        200.0      2.5      0.0                  for k in range(beam_size):
+   264        60        448.0      7.5      0.0                      word_ids = [next_candidates[j][k][1] for j in range(batch_size)]
+   265        60        382.0      6.4      0.0                      scores = [next_candidates[j][k][0] for j in range(batch_size)]
+   266        60        389.0      6.5      0.0                      seq = [next_candidates[j][k][2] for j in range(batch_size)]
+   267       120       1078.0      9.0      0.1                      curr_beams.append(BeamNode(word_ids = torch.LongTensor(word_ids),
+   268        60        395.0      6.6      0.0                                                scores = torch.FloatTensor(scores),
+   269        60        134.0      2.2      0.0                                                seq = seq))
+   270                                                               
+   271        20        613.0     30.6      0.0                  attention_weights[:, i, :] = attention_weight
+   272                                                       # set imgs/targets if provided
+   273         4         11.0      2.8      0.0              for beam in curr_beams:
+   274         3          8.0      2.7      0.0                  if type(imgs) != type(None):
+   275         3          8.0      2.7      0.0                      beam.add_imgs(imgs)
+   276         3          6.0      2.0      0.0                  if type(targets) != type(None):
+   277         3          7.0      2.3      0.0                      beam.add_targets(targets)
+   278         1          2.0      2.0      0.0              if return_attention:
+   279                                                           return curr_beams, attention_weights
+   280                                                       else:
+   281         1          9.0      9.0      0.0                  return curr_beams
